@@ -1,0 +1,27 @@
+# Конфиг для деплоя на Fly.io (https://fly.io/docs).
+# Использование:
+#   fly launch --no-deploy --copy-config --name <your-name>
+#   fly volumes create data --size 1 --region fra
+#   fly secrets set BOT_TOKEN=xxx ADMIN_IDS=123456789
+#   fly deploy
+#
+# Для бесплатного тарифа 256MB RAM достаточно.
+
+app = "era-etp-bot"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Бот работает в long-polling режиме, HTTP-сервис не нужен.
+# services/[http_service] не объявляем — это автоматически приводит
+# к запуску машины в непрерывном режиме (без auto-stop).
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
+
+[mounts]
+  source = "data"
+  destination = "/app/data"
