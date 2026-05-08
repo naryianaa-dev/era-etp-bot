@@ -58,6 +58,9 @@ class Offer(Base):
     title: Mapped[str] = mapped_column(String(256))
     description: Mapped[str] = mapped_column(Text)
     price_rub: Mapped[int] = mapped_column(Integer)  # полная сумма в рублях
+    # car / parts / shop — определяет правило предоплаты
+    # (для car — 15% но не менее prepay_min_rub, для остальных — ровно 15%).
+    kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="sent")
     # sent / accepted / paid_invoice / paid_sbp / declined
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -76,9 +79,17 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 
 
 async def init_db() -> None:
-    """Создать таблицы, если отсутствуют."""
+    """Создать таблицы, если отсутствуют, и применить простые миграции.
+
+    Sqlite-миграции тут делаются «вручную» через PRAGMA table_info — идемпотентно.
+    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # idempotent ALTER TABLE для уже существующих БД
+        res = await conn.exec_driver_sql("PRAGMA table_info(offers)")
+        existing = {row[1] for row in res.fetchall()}
+        if "kind" not in existing:
+            await conn.exec_driver_sql("ALTER TABLE offers ADD COLUMN kind VARCHAR(16)")
 
 
 async def get_or_create_user(

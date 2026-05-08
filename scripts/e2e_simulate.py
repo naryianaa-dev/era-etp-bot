@@ -15,11 +15,11 @@
 """
 from __future__ import annotations
 
+# ruff: noqa: E402 — env-setup must precede bot package imports
 import asyncio
 import os
 import sys
 import tempfile
-import textwrap
 import typing as t
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -46,8 +46,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.methods import TelegramMethod
 from aiogram.types import (
-    CallbackQuery, Chat, InlineKeyboardButton, InlineKeyboardMarkup,
-    Message, PhotoSize, ReplyKeyboardMarkup, Update, User,
+    Chat, Message, Update, User,
 )
 
 from bot.db import init_db
@@ -202,8 +201,7 @@ def trim(text: str, width: int = 120) -> str:
     return "\n".join(out)
 
 
-def drain_calls(session: MockSession, as_admin: bool = False) -> None:
-    audience = "АДМИН" if as_admin else "ЮЗЕР"
+def drain_calls(session: MockSession) -> None:
     for c in session.calls:
         method = c.method
         args   = c.args
@@ -228,7 +226,6 @@ def drain_calls(session: MockSession, as_admin: bool = False) -> None:
             print(f"  {prefix} [sendPhoto] {caption}")
         elif method == "sendDocument":
             prefix = "BOT→ADMIN" if chat == ADMIN.id else "BOT→USER"
-            fname = args.get("document")
             caption = trim(args.get("caption") or "[document]")
             print(f"  {prefix} [sendDocument] {caption}")
         elif method == "answerCallbackQuery":
@@ -382,44 +379,60 @@ async def main() -> None:
         ("/inbox_new", msg_update("/inbox_new", as_admin=True)),
     ])
 
-    # -------- сценарий 9: АДМИН создаёт оффер + ЮЗЕР принимает + оплата СБП --
+    # -------- сценарий 9: АВТО-оффер (kind=car → min 100k) + СБП --
+    # создаётся из кнопки «Создать оффер» под заявкой #1 (авто)
     await run_scenario(
-        "Админ → /offer → юзер принимает → оплата СБП",
+        "Оффер АВТО (kind=car) → юзер принимает → оплата СБП",
         dp, bot,
         [
-            ("/offer <user_id>",   msg_update(f"/offer {USER.id}",   as_admin=True)),
+            ("кнопка 'Создать оффер' под #1", cb_update(f"adm:make_offer:{USER.id}:1", as_admin=True)),
             ("название оффера",    msg_update("BMW X5 2019 с дилерского склада", as_admin=True)),
             ("описание",           msg_update("Белый, 70 т.км., один хозяин", as_admin=True)),
-            ("сумма ₽",            msg_update("2 500 000", as_admin=True)),
+            ("сумма ₽ 2 500 000",  msg_update("2 500 000", as_admin=True)),
             ("юзер: Сделать выбор", cb_update("offer:1:accept", as_admin=False)),
             ("юзер: СБП",          cb_update("offer:1:pay:sbp", as_admin=False)),
         ],
     )
 
-    # -------- сценарий 10: АДМИН создаёт оффер + ЮЗЕР принимает + оплата Счёт --
+    # -------- сценарий 10: ПОКУПКИ-оффер (kind=shop → 15% без минимума) + Счёт --
     await run_scenario(
-        "Админ → /offer → юзер принимает → оплата Счёт",
+        "Оффер ПОКУПКИ (kind=shop) → юзер принимает → оплата Счёт",
         dp, bot,
         [
-            ("/offer <user_id>",   msg_update(f"/offer {USER.id}", as_admin=True)),
+            ("кнопка 'Создать оффер' под #5", cb_update(f"adm:make_offer:{USER.id}:5", as_admin=True)),
             ("название",           msg_update("MacBook Pro M3 Max", as_admin=True)),
             ("описание",           msg_update("Заказ из-за рубежа с доставкой", as_admin=True)),
-            ("сумма ₽",            msg_update("450000", as_admin=True)),
+            ("сумма ₽ 450 000",    msg_update("450000", as_admin=True)),
             ("юзер: Сделать выбор", cb_update("offer:2:accept", as_admin=False)),
             ("юзер: Счёт",         cb_update("offer:2:pay:invoice", as_admin=False)),
         ],
     )
 
-    # -------- сценарий 11: ЮЗЕР отклоняет оффер --------------
+    # -------- сценарий 11: ЗАПЧАСТИ-оффер (kind=parts → 15% без минимума) + СБП --
+    # специально маленькая сумма 8500 ₽ → предоплата должна быть 1275 ₽, НЕ 100 000
     await run_scenario(
-        "Админ → /offer → юзер отклоняет",
+        "Оффер ЗАПЧАСТИ (kind=parts) маленькая сумма → юзер принимает → СБП",
         dp, bot,
         [
-            ("/offer <user_id>",   msg_update(f"/offer {USER.id}", as_admin=True)),
-            ("название",           msg_update("Запчасть для LADA", as_admin=True)),
-            ("описание",           msg_update("Фонарь 2021 года", as_admin=True)),
-            ("сумма ₽",            msg_update("8500", as_admin=True)),
-            ("юзер: Отклонить",    cb_update("offer:3:decline", as_admin=False)),
+            ("кнопка 'Создать оффер' под #4", cb_update(f"adm:make_offer:{USER.id}:4", as_admin=True)),
+            ("название",           msg_update("Задний фонарь LADA Vesta 2021", as_admin=True)),
+            ("описание",           msg_update("Оригинал, доставка 3 дня", as_admin=True)),
+            ("сумма ₽ 8 500",      msg_update("8500", as_admin=True)),
+            ("юзер: Сделать выбор", cb_update("offer:3:accept", as_admin=False)),
+            ("юзер: СБП",          cb_update("offer:3:pay:sbp", as_admin=False)),
+        ],
+    )
+
+    # -------- сценарий 11b: юзер отклоняет оффер -----------------
+    await run_scenario(
+        "Оффер ПОКУПКИ → юзер отклоняет",
+        dp, bot,
+        [
+            ("кнопка 'Создать оффер' под #5", cb_update(f"adm:make_offer:{USER.id}:5", as_admin=True)),
+            ("название",           msg_update("Apple Watch Ultra 2", as_admin=True)),
+            ("описание",           msg_update("Titanium, 49mm", as_admin=True)),
+            ("сумма ₽",            msg_update("85000", as_admin=True)),
+            ("юзер: Отклонить",    cb_update("offer:4:decline", as_admin=False)),
         ],
     )
 

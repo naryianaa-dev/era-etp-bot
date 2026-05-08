@@ -19,6 +19,17 @@ from reportlab.pdfgen import canvas
 from ..config import get_settings
 
 
+def prepay_line(prepay_rub: int, kind: str | None = None) -> str:
+    """Строка вида «Предоплата 15% (не менее 100 000 ₽): 375 000 ₽».
+
+    Оговорка про минимум отображается только для ``kind == "car"``,
+    потому что для запчастей и покупок минимум не применяется.
+    """
+    st = get_settings()
+    suffix = f" (не менее {st.prepay_min_rub:,} ₽)".replace(",", " ") if kind == "car" else ""
+    return f"Предоплата {st.prepay_pct}%{suffix}: {prepay_rub:,} ₽".replace(",", " ")
+
+
 # ---------- попытаемся подхватить кириллический шрифт ---------- #
 _REGISTERED_FONT = "Helvetica"
 for _candidate in (
@@ -33,11 +44,19 @@ for _candidate in (
         continue
 
 
-def compute_prepayment(total_rub: int) -> int:
-    """15% от суммы, но не меньше минимального порога."""
+def compute_prepayment(total_rub: int, kind: str | None = None) -> int:
+    """Расчёт предоплаты.
+
+    Правила (по ТЗ):
+      * автомобиль (kind == "car") — 15% от суммы, но не меньше ``prepay_min_rub``;
+      * запчасти и покупки (любой другой kind) — ровно 15% от суммы,
+        минимум не применяется.
+    """
     st = get_settings()
     calc = total_rub * st.prepay_pct // 100
-    return max(calc, st.prepay_min_rub)
+    if kind == "car":
+        return max(calc, st.prepay_min_rub)
+    return calc
 
 
 def make_sbp_qr(
@@ -65,6 +84,7 @@ def make_invoice_pdf(
     description: str,
     total_rub: int,
     prepay_rub: int,
+    kind: str | None = None,
 ) -> bytes:
     """Сгенерировать PDF-счёт на предоплату (mock). Возвращает байты PDF."""
     buf = io.BytesIO()
@@ -86,7 +106,7 @@ def make_invoice_pdf(
         f"Описание: {description[:200]}",
         "",
         f"Полная сумма: {total_rub:,} ₽".replace(",", " "),
-        f"Предоплата 15% (не менее 100 000 ₽): {prepay_rub:,} ₽".replace(",", " "),
+        prepay_line(prepay_rub, kind=kind),
         "",
         "Реквизиты для оплаты (mock):",
         "  Получатель: ООО «ERA ETP»",
