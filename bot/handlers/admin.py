@@ -20,7 +20,12 @@ from ..db import Offer, Request, SessionLocal, User
 from ..keyboards import main_menu, offer_choice_kb, payment_method_kb, reply_cancel
 from ..notify import format_request, request_action_kb
 from ..states import AdminFlow
-from ..utils.payments import compute_prepayment, make_invoice_pdf, make_sbp_qr
+from ..utils.payments import (
+    prepay_line,
+    compute_prepayment,
+    make_invoice_pdf,
+    make_sbp_qr,
+)
 from ..utils.validators import parse_int
 
 router = Router(name="admin")
@@ -254,6 +259,7 @@ async def _commit_offer(message: Message, state: FSMContext) -> None:
     desc = data["offer_description"]
     price = int(data["offer_price_rub"])
     admin_tg_id = message.from_user.id
+    source_request_id = data.get("source_request_id")
 
     async with SessionLocal() as session:
         res = await session.execute(select(User).where(User.tg_id == target_tg))
@@ -265,12 +271,20 @@ async def _commit_offer(message: Message, state: FSMContext) -> None:
             )
             await state.clear()
             return
+        # если оффер создаётся из кнопки «Создать оффер» под конкретной
+        # заявкой — берём её kind; иначе kind None (предоплата без минимума)
+        kind: str | None = None
+        if source_request_id is not None:
+            src = await session.get(Request, int(source_request_id))
+            if src is not None:
+                kind = src.kind
         offer = Offer(
             user_id=user.id,
             admin_tg_id=admin_tg_id,
             title=title,
             description=desc,
             price_rub=price,
+            kind=kind,
             status="sent",
         )
         session.add(offer)
@@ -279,13 +293,14 @@ async def _commit_offer(message: Message, state: FSMContext) -> None:
 
     await state.clear()
 
-    prepay = compute_prepayment(price)
+    prepay = compute_prepayment(price, kind=kind)
+    prepay_str = prepay_line(prepay, kind=kind)
     text_to_user = (
         f"📨 <b>Новое предложение #{offer.id}</b>\n\n"
         f"<b>{title}</b>\n\n"
         f"{desc}\n\n"
         f"Сумма: <b>{price:,} ₽</b>\n".replace(",", " ")
-        + f"Предоплата 15% (не меньше 100 000 ₽): <b>{prepay:,} ₽</b>\n\n".replace(",", " ")
+        + f"{prepay_str}\n\n"
         + "Нажмите «Сделать выбор», чтобы принять предложение и выбрать способ оплаты."
     )
     try:
@@ -356,7 +371,7 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
             return
         offer.status = "paid_sbp" if method == "sbp" else "paid_invoice"
         await session.commit()
-    prepay = compute_prepayment(offer.price_rub)
+    prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
 
     if method == "sbp":
         png, payload = make_sbp_qr(offer.id, user.tg_id, prepay)
@@ -379,6 +394,7 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
             offer.description,
             offer.price_rub,
             prepay,
+            kind=offer.kind,
         )
         await cb.message.answer_document(
             BufferedInputFile(pdf, filename=f"invoice_{offer.id}.pdf"),
