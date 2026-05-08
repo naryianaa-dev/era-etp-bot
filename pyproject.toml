@@ -1,0 +1,39 @@
+[project]
+name = "era-etp-bot"
+version = "0.1.0"
+description = "Telegram-бот era_etp_bot (aiogram 3.x): автомобили, запчасти, покупки + mock SBP/Invoice"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiogram>=3.13,<4.0",
+    "aiosqlite>=0.20",
+    "sqlalchemy[asyncio]>=2.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "qrcode[pil]>=7.4",
+    "reportlab>=4.1",
+    "validators>=0.22",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["bot", "bot.handlers", "bot.utils"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
