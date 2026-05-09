@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # только инструкция по реквизитам (ГОСТ Р QR). Если указано — добавляется
     # отдельный блок «Перевод СБП по номеру: +7…» в caption к QR.
     payee_phone: str | None = Field(None, alias="PAYEE_PHONE")
+    # Прямая ссылка на быструю оплату (например, статичная Tinkoff
+    # «tinkoff.ru/rm/...»). Если задана — клиент получает inline-кнопку
+    # «💳 Оплатить N ₽», которая открывает банк/браузер, и не страдает с
+    # ручным вводом. ГОСТ Р QR остаётся как fallback.
+    payee_payment_url: str | None = Field(None, alias="PAYEE_PAYMENT_URL")
 
     tz: str = Field("Europe/Moscow", alias="TZ")
     log_level: str = Field("INFO", alias="LOG_LEVEL")

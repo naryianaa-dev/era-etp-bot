@@ -389,7 +389,11 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
         await session.commit()
     prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
     caption = payment_caption(offer.id, prepay)
-    paid_kb = client_paid_kb(offer.id)
+    paid_kb = client_paid_kb(
+        offer.id,
+        pay_url=get_settings().payee_payment_url,
+        amount_rub=prepay,
+    )
 
     if method == "sbp":
         png, _payload = make_sbp_qr(offer.id, user.tg_id, prepay)
