@@ -68,6 +68,60 @@ def compute_prepayment(total_rub: int, kind: str | None = None) -> int:
     return calc
 
 
+def _format_phone_human(raw: str) -> str:
+    """``+79991234567`` → ``+7 (999) 123-45-67``. Любые сторонние пробелы/скобки игнорируются."""
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 11 and digits[0] in {"7", "8"}:
+        d = digits
+        return f"+7 ({d[1:4]}) {d[4:7]}-{d[7:9]}-{d[9:11]}"
+    return raw
+
+
+def payment_caption(offer_id: int, prepay_rub: int) -> str:
+    """Caption к QR/PDF с инструкцией по оплате.
+
+    Возвращает HTML-готовый текст. Если в настройках задан ``payee_phone`` —
+    добавляется блок про быстрый СБП-перевод по номеру (НСПК публичного API
+    для C2C QR не отдаёт, поэтому номер вводится в банке вручную). Универсальный
+    ГОСТ Р 56042-2014 QR работает в любом случае — отдаётся как картинка.
+    """
+    st = get_settings()
+    amount_str = f"{prepay_rub:,} ₽".replace(",", " ")
+    purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
+
+    parts: list[str] = [
+        f"📱 <b>Оплата — оффер #{offer_id}</b>",
+        "",
+        f"<b>Сумма:</b> {amount_str}",
+        f"<b>Назначение:</b> {purpose}",
+        f"<b>Получатель:</b> {st.payee_name} (НПД, ИНН {st.payee_inn})",
+        "",
+    ]
+    if st.payee_phone:
+        phone_human = _format_phone_human(st.payee_phone)
+        parts.extend(
+            [
+                "<b>Способ 1 — СБП по номеру телефона:</b>",
+                f"📞 <code>{phone_human}</code> ({st.payee_bank_name})",
+                "В приложении банка → СБП → Перевод по номеру → "
+                "ввести номер вручную, выбрать банк получателя, ввести сумму.",
+                "",
+            ]
+        )
+    parts.extend(
+        [
+            "<b>Способ 2 — отсканировать QR-код ниже:</b>",
+            "Любое банковское приложение РФ (Тинькофф/Сбер/Альфа/ВТБ) "
+            "распознает QR (ГОСТ Р 56042-2014) и автоматически заполнит "
+            "форму перевода — реквизиты + сумма + назначение.",
+            "",
+            "После оплаты нажмите «✅ Я оплатил» ниже — мы свяжемся с вами "
+            "и пришлём чек самозанятого.",
+        ]
+    )
+    return "\n".join(parts)
+
+
 def _gost_qr_payload(amount_rub: int, purpose: str) -> str:
     """Формирует payload в формате ГОСТ Р 56042-2014.
 

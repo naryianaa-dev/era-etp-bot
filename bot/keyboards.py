@@ -122,3 +122,32 @@ def offer_choice_kb(offer_id: int) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"offer:{offer_id}:decline")],
         ]
     )
+
+
+def client_paid_kb(offer_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура у клиента после получения QR/PDF: «Я оплатил» + меню."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Я оплатил",
+                    callback_data=f"offer:{offer_id}:claim_paid",
+                )
+            ],
+            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="menu:home")],
+        ]
+    )
+
+
+def admin_confirm_paid_kb(offer_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура у админа в уведомлении об ожидании оплаты: «Оплата получена»."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Оплата получена",
+                    callback_data=f"offer:{offer_id}:confirm_paid",
+                )
+            ],
+        ]
+    )

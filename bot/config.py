@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     payee_bik: str = Field("044525974", alias="PAYEE_BIK")
     payee_corr_account: str = Field("30101810145250000974", alias="PAYEE_CORR_ACCOUNT")
     payee_email: str = Field("karoak@mail.ru", alias="PAYEE_EMAIL")
+    # Телефон для приёма СБП-перевода. Если пусто — клиенту показывается
+    # только инструкция по реквизитам (ГОСТ Р QR). Если указано — добавляется
+    # отдельный блок «Перевод СБП по номеру: +7…» в caption к QR.
+    payee_phone: str | None = Field(None, alias="PAYEE_PHONE")
 
     tz: str = Field("Europe/Moscow", alias="TZ")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
