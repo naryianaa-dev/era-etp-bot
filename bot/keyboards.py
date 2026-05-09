@@ -124,19 +124,34 @@ def offer_choice_kb(offer_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def client_paid_kb(offer_id: int) -> InlineKeyboardMarkup:
-    """Клавиатура у клиента после получения QR/PDF: «Я оплатил» + меню."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Я оплатил",
-                    callback_data=f"offer:{offer_id}:claim_paid",
-                )
-            ],
-            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="menu:home")],
+def client_paid_kb(
+    offer_id: int,
+    *,
+    pay_url: str | None = None,
+    amount_rub: int | None = None,
+) -> InlineKeyboardMarkup:
+    """Клавиатура у клиента после получения QR/PDF: «Я оплатил» + меню.
+
+    Если переданы ``pay_url`` (например, статичная ``tinkoff.ru/rm/...``)
+    и ``amount_rub`` — добавляется верхняя URL-кнопка «💳 Оплатить N ₽».
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    if pay_url:
+        if amount_rub is not None:
+            label = f"🟢 Оплатить через СБП — {amount_rub:,} ₽".replace(",", " ")
+        else:
+            label = "🟢 Оплатить через СБП"
+        rows.append([InlineKeyboardButton(text=label, url=pay_url)])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="✅ Я оплатил",
+                callback_data=f"offer:{offer_id}:claim_paid",
+            )
         ]
     )
+    rows.append([InlineKeyboardButton(text="🏠 В главное меню", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_confirm_paid_kb(offer_id: int) -> InlineKeyboardMarkup:
