@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     prepay_min_rub: int = Field(100_000, alias="PREPAY_MIN_RUB")
     prepay_pct: int = Field(15, alias="PREPAY_PCT")
 
+    # Реквизиты получателя для PDF-счетов и QR-кода (ГОСТ Р 56042-2014).
+    # По умолчанию подставлены боевые реквизиты самозанятого; при необходимости
+    # переопределяются через переменные окружения.
+    payee_name: str = Field("АКОПЯН АРТУР КАРОЕВИЧ", alias="PAYEE_NAME")
+    payee_inn: str = Field("772402520705", alias="PAYEE_INN")
+    payee_tax_regime: str = Field("НПД (самозанятый)", alias="PAYEE_TAX_REGIME")
+    payee_account: str = Field("40817810800106508636", alias="PAYEE_ACCOUNT")
+    payee_bank_name: str = Field("АО «ТИНЬКОФФ БАНК»", alias="PAYEE_BANK_NAME")
+    payee_bik: str = Field("044525974", alias="PAYEE_BIK")
+    payee_corr_account: str = Field("30101810145250000974", alias="PAYEE_CORR_ACCOUNT")
+    payee_email: str = Field("karoak@mail.ru", alias="PAYEE_EMAIL")
+
     tz: str = Field("Europe/Moscow", alias="TZ")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
