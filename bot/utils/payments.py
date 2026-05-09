@@ -1,7 +1,16 @@
-"""Mock-реализация платёжных потоков (СБП QR + счёт PDF).
+"""Платёжные потоки: банковский QR (ГОСТ Р 56042-2014) и PDF-счёт.
 
-В боевой версии тут были бы интеграции с банком/платёжкой. Сейчас это заглушки,
-которые генерируют картинку QR (любую строку) и PDF-счёт.
+QR-код формируется в формате ГОСТ Р 56042-2014 — это универсальный
+российский стандарт «банковский QR-код для платёжных документов».
+Сканер любого крупного банка РФ (Тинькофф, Сбер, Альфа, ВТБ и т.д.)
+парсит этот формат и автоматически заполняет форму перевода:
+получатель, ИНН, БИК, расч. счёт, корр. счёт, сумма и назначение.
+
+PDF-счёт содержит те же реквизиты в человекочитаемом виде.
+
+Реквизиты получателя берутся из настроек (см. ``bot/config.py``,
+поля ``payee_*``); по умолчанию — боевые реквизиты самозанятого
+(НПД), при необходимости переопределяются через переменные окружения.
 """
 
 from __future__ import annotations
@@ -59,17 +68,45 @@ def compute_prepayment(total_rub: int, kind: str | None = None) -> int:
     return calc
 
 
+def _gost_qr_payload(amount_rub: int, purpose: str) -> str:
+    """Формирует payload в формате ГОСТ Р 56042-2014.
+
+    Стандарт «Банковский QR-код для платёжных документов».
+    ``Sum`` указывается в копейках. Поле-разделитель — ``|``
+    (общепринятый в банковских приложениях; CRLF тоже допускается
+    стандартом, но ``|`` парсится во всех протестированных банках).
+
+    Минимальный набор полей: Name, PersonalAcc, BankName, BIC, CorrespAcc.
+    Опциональные: Sum, Purpose, PayeeINN.
+    """
+    st = get_settings()
+    fields = [
+        "ST00012",
+        f"Name={st.payee_name}",
+        f"PersonalAcc={st.payee_account}",
+        f"BankName={st.payee_bank_name}",
+        f"BIC={st.payee_bik}",
+        f"CorrespAcc={st.payee_corr_account}",
+        f"Sum={amount_rub * 100}",
+        f"Purpose={purpose}",
+        f"PayeeINN={st.payee_inn}",
+    ]
+    return "|".join(fields)
+
+
 def make_sbp_qr(
     offer_id: int,
     user_tg_id: int,
     amount_rub: int,
 ) -> tuple[bytes, str]:
-    """Сгенерировать PNG с QR-кодом (mock). Возвращает (png_bytes, payload_str)."""
-    payload = (
-        "https://qr.nspk.ru/AD10000000000000000000000000000000"
-        f"?type=02&bank=100000000010&sum={amount_rub * 100}"
-        f"&cur=RUB&crc={offer_id:08x}"
-    )
+    """Сгенерировать PNG с банковским QR-кодом по ГОСТ Р 56042-2014.
+
+    Возвращает ``(png_bytes, payload_str)``. ``payload_str`` — это
+    содержимое QR в текстовом виде (для логов/диагностики, в чат
+    показывать не обязательно).
+    """
+    purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
+    payload = _gost_qr_payload(amount_rub=amount_rub, purpose=purpose)
     img = qrcode.make(payload, box_size=10, border=2)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -86,7 +123,11 @@ def make_invoice_pdf(
     prepay_rub: int,
     kind: str | None = None,
 ) -> bytes:
-    """Сгенерировать PDF-счёт на предоплату (mock). Возвращает байты PDF."""
+    """Сгенерировать PDF-счёт на предоплату. Возвращает байты PDF.
+
+    Реквизиты получателя берутся из ``Settings.payee_*``.
+    """
+    st = get_settings()
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
@@ -108,16 +149,18 @@ def make_invoice_pdf(
         f"Полная сумма: {total_rub:,} ₽".replace(",", " "),
         prepay_line(prepay_rub, kind=kind),
         "",
-        "Реквизиты для оплаты (mock):",
-        "  Получатель: ООО «ERA ETP»",
-        "  ИНН: 7728282160",
-        "  Расч. счёт: 40702810000000000001",
-        "  Банк: ПАО «МОСКОВСКИЙ КРЕДИТНЫЙ БАНК»",
-        "  БИК: 044525659",
-        "  Корр. счёт: 30101810745250000659",
+        "Реквизиты для оплаты:",
+        f"  Получатель: {st.payee_name}",
+        f"  Режим налогообложения: {st.payee_tax_regime}",
+        f"  ИНН: {st.payee_inn}",
+        f"  Расч. счёт: {st.payee_account}",
+        f"  Банк: {st.payee_bank_name}",
+        f"  БИК: {st.payee_bik}",
+        f"  Корр. счёт: {st.payee_corr_account}",
+        f"  E-mail: {st.payee_email}",
         "",
         "Назначение платежа: предоплата по офферу ETP-"
-        f"{offer_id:06d} (без НДС).",
+        f"{offer_id:06d}.",
     ]
     for line in lines:
         c.drawString(2 * cm, y, line)
@@ -127,7 +170,7 @@ def make_invoice_pdf(
     c.drawString(
         2 * cm,
         2 * cm,
-        "Документ сгенерирован автоматически era_etp_bot. Не требует подписи (mock).",
+        "Документ сгенерирован автоматически era_etp_bot. Подпись не требуется.",
     )
     c.showPage()
     c.save()

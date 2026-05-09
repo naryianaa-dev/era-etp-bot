@@ -375,14 +375,16 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
     prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
 
     if method == "sbp":
-        png, payload = make_sbp_qr(offer.id, user.tg_id, prepay)
+        png, _payload = make_sbp_qr(offer.id, user.tg_id, prepay)
         await cb.message.answer_photo(
             BufferedInputFile(png, filename=f"sbp_{offer.id}.png"),
             caption=(
-                f"📱 <b>СБП для оффера #{offer.id}</b>\n\n"
+                f"📱 <b>Оплата по QR — оффер #{offer.id}</b>\n\n"
                 f"Сумма к оплате: <b>{prepay:,} ₽</b>\n".replace(",", " ")
-                + f"Ссылка для оплаты (mock):\n<code>{payload}</code>\n\n"
-                "Отсканируйте QR в приложении банка."
+                + "Отсканируйте QR в приложении банка (Тинькофф, Сбер, "
+                "Альфа, ВТБ и т.д.) — реквизиты и сумма заполнятся "
+                "автоматически.\n\n"
+                "<i>Формат QR — ГОСТ Р 56042-2014.</i>"
             ),
             reply_markup=main_menu(),
         )
