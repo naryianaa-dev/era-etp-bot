@@ -13,6 +13,7 @@ from sqlalchemy import select
 from ..db import Request, SessionLocal, get_or_create_user
 from ..keyboards import main_menu, reply_cancel
 from ..states import Registration
+from ..utils.text import h
 
 router = Router(name="start")
 
@@ -30,7 +31,7 @@ async def on_start(message: Message, state: FSMContext) -> None:
 
     if has_name:
         await message.answer(
-            f"С возвращением, <b>{user.name}</b>! 👋\n\n"
+            f"С возвращением, <b>{h(user.name)}</b>! 👋\n\n"
             "Выберите, что сделать:",
             reply_markup=main_menu(),
         )
@@ -60,7 +61,7 @@ async def on_name(message: Message, state: FSMContext) -> None:
         await session.commit()
     await state.clear()
     await message.answer(
-        f"Приятно познакомиться, <b>{name}</b>! Выберите, что сделать:",
+        f"Приятно познакомиться, <b>{h(name)}</b>! Выберите, что сделать:",
         reply_markup=main_menu(),
     )
 
@@ -95,7 +96,7 @@ async def cb_my_requests(cb: CallbackQuery) -> None:
             summary = payload.get("summary") or payload.get("brand") or "заявка"
             lines.append(
                 f"• #{r.id} | {dt} | {kind_ru.get(r.kind, r.kind)} | "
-                f"<i>{summary}</i> | статус: {r.status}"
+                f"<i>{h(summary)}</i> | статус: {h(r.status)}"
             )
         text = "\n".join(lines)
 

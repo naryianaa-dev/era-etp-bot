@@ -12,6 +12,7 @@ from ..db import Request, SessionLocal, get_or_create_user
 from ..keyboards import main_menu, reply_cancel
 from ..notify import notify_admins_new_request
 from ..states import ShopFlow
+from ..utils.text import h
 from ..utils.validators import is_valid_url
 
 router = Router(name="shop")
@@ -87,9 +88,9 @@ async def on_comments(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ <b>Заявка #{req.id} на покупку принята.</b>\n\n"
-        f"Товар: {data.get('product_name')}\n"
-        f"Ссылка: {data.get('url')}\n"
-        + (f"Комментарии: {val}\n" if val else "")
+        f"Товар: {h(data.get('product_name'))}\n"
+        f"Ссылка: {h(data.get('url'))}\n"
+        + (f"Комментарии: {h(val)}\n" if val else "")
         + "\nМенеджер свяжется с вами с предложением.",
         reply_markup=main_menu(),
     )

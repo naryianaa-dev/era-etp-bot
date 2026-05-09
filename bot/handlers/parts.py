@@ -12,6 +12,7 @@ from ..db import Request, SessionLocal, get_or_create_user
 from ..keyboards import main_menu, reply_cancel, yes_no_kb
 from ..notify import notify_admins_new_request
 from ..states import PartsFlow
+from ..utils.text import h
 from ..utils.validators import is_valid_vin, parse_year
 
 router = Router(name="parts")
@@ -184,9 +185,9 @@ async def _finalize_parts(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ <b>Заявка #{req.id} на запчасть принята.</b>\n\n"
-        f"{summary}\n"
-        + (f"VIN: <code>{data.get('vin')}</code>\n" if data.get("vin") else "")
-        + (f"Артикул: <code>{data.get('part_number')}</code>\n" if data.get("part_number") else "")
+        f"{h(summary)}\n"
+        + (f"VIN: <code>{h(data.get('vin'))}</code>\n" if data.get("vin") else "")
+        + (f"Артикул: <code>{h(data.get('part_number'))}</code>\n" if data.get("part_number") else "")
         + ("Фото: получено\n" if data.get("photo_file_id") else "")
         + "\nМенеджер подберёт деталь и свяжется с вами.",
         reply_markup=main_menu(),
@@ -222,7 +223,7 @@ async def _finalize_parts_cb(cb: CallbackQuery, state: FSMContext) -> None:
             await notify_admins_new_request(cb.bot, req, user)
     await state.clear()
     text = (
-        f"✅ <b>Заявка #{req.id} на запчасть принята.</b>\n\n{summary}\n\n"
+        f"✅ <b>Заявка #{req.id} на запчасть принята.</b>\n\n{h(summary)}\n\n"
         "Менеджер подберёт деталь и свяжется с вами."
     )
     if cb.message:
