@@ -17,7 +17,14 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..db import Offer, Request, SessionLocal, User
-from ..keyboards import main_menu, offer_choice_kb, payment_method_kb, reply_cancel
+from ..keyboards import (
+    admin_confirm_paid_kb,
+    client_paid_kb,
+    main_menu,
+    offer_choice_kb,
+    payment_method_kb,
+    reply_cancel,
+)
 from ..notify import format_request, request_action_kb
 from ..states import AdminFlow
 from ..utils.payments import (
@@ -25,6 +32,7 @@ from ..utils.payments import (
     compute_prepayment,
     make_invoice_pdf,
     make_sbp_qr,
+    payment_caption,
 )
 from ..utils.text import h
 from ..utils.validators import parse_int
@@ -359,6 +367,13 @@ async def offer_user_choice(cb: CallbackQuery) -> None:
 
 @router.callback_query(F.data.regexp(r"^offer:(\d+):pay:(sbp|invoice)$"))
 async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
+    """Клиент выбрал способ оплаты.
+
+    Бот отправляет инструкцию + QR/PDF + кнопку «Я оплатил» клиенту, а админу —
+    уведомление с кнопкой «✅ Оплата получена». Деньги поступают на счёт
+    самозанятого вне Telegram (СБП C2C по номеру или по реквизитам), бот лишь
+    выступает курьером инструкций и трекером статуса.
+    """
     _, offer_id_s, _, method = (cb.data or "").split(":")
     offer_id = int(offer_id_s)
     async with SessionLocal() as session:
@@ -373,20 +388,15 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
         offer.status = "paid_sbp" if method == "sbp" else "paid_invoice"
         await session.commit()
     prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
+    caption = payment_caption(offer.id, prepay)
+    paid_kb = client_paid_kb(offer.id)
 
     if method == "sbp":
         png, _payload = make_sbp_qr(offer.id, user.tg_id, prepay)
         await cb.message.answer_photo(
             BufferedInputFile(png, filename=f"sbp_{offer.id}.png"),
-            caption=(
-                f"📱 <b>Оплата по QR — оффер #{offer.id}</b>\n\n"
-                f"Сумма к оплате: <b>{prepay:,} ₽</b>\n".replace(",", " ")
-                + "Отсканируйте QR в приложении банка (Тинькофф, Сбер, "
-                "Альфа, ВТБ и т.д.) — реквизиты и сумма заполнятся "
-                "автоматически.\n\n"
-                "<i>Формат QR — ГОСТ Р 56042-2014.</i>"
-            ),
-            reply_markup=main_menu(),
+            caption=caption,
+            reply_markup=paid_kb,
         )
     else:
         pdf = make_invoice_pdf(
@@ -401,11 +411,8 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
         )
         await cb.message.answer_document(
             BufferedInputFile(pdf, filename=f"invoice_{offer.id}.pdf"),
-            caption=(
-                f"🧾 <b>Счёт на предоплату по офферу #{offer.id}</b>\n\n"
-                f"К оплате: <b>{prepay:,} ₽</b>".replace(",", " ")
-            ),
-            reply_markup=main_menu(),
+            caption=caption,
+            reply_markup=paid_kb,
         )
 
     if cb.message:
@@ -414,16 +421,135 @@ async def offer_pay(cb: CallbackQuery, bot: Bot) -> None:
         except Exception:
             pass
     await cb.answer("Документы отправлены")
+
+    # Админу — уведомление с inline-кнопкой «✅ Оплата получена».
+    uname = f"@{h(user.username)}" if user.username else "—"
+    admin_text = (
+        f"💰 <b>Ожидание оплаты — оффер #{offer.id}</b>\n\n"
+        f"Клиент: {h(user.name) or '—'} ({uname}, tg_id=<code>{user.tg_id}</code>)\n"
+        f"Способ: <b>{method.upper()}</b>\n"
+        f"Полная сумма: <b>{offer.price_rub:,} ₽</b>\n".replace(",", " ")
+        + f"<b>Предоплата к получению: {prepay:,} ₽</b>\n".replace(",", " ")
+        + "\nКогда увидишь поступление в банке — нажми "
+        "«✅ Оплата получена»."
+    )
+    await _notify_admins(bot, admin_text, kb=admin_confirm_paid_kb(offer.id))
+
+
+@router.callback_query(F.data.regexp(r"^offer:(\d+):claim_paid$"))
+async def offer_claim_paid(cb: CallbackQuery, bot: Bot) -> None:
+    """Клиент жмёт «✅ Я оплатил». Бот меняет статус и пушит админам напоминание."""
+    _, offer_id_s, _ = (cb.data or "").split(":")
+    offer_id = int(offer_id_s)
+    async with SessionLocal() as session:
+        offer = await session.get(Offer, offer_id)
+        if offer is None:
+            await cb.answer("Оффер не найден", show_alert=True)
+            return
+        user = await session.get(User, offer.user_id)
+        if user is None or user.tg_id != cb.from_user.id:
+            await cb.answer("Этот оффер — не ваш", show_alert=True)
+            return
+        if offer.status == "confirmed_paid":
+            await cb.answer("Оплата уже подтверждена админом ✅", show_alert=True)
+            return
+        offer.status = "claimed_paid"
+        await session.commit()
+    if cb.message:
+        try:
+            await cb.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await cb.message.answer(
+            f"✉️ Спасибо! Сообщили продавцу о вашей оплате по офферу #{offer.id}.\n\n"
+            "Как только увидим поступление, подтвердим и пришлём чек самозанятого.",
+            reply_markup=main_menu(),
+        )
+    await cb.answer()
+
+    uname = f"@{h(user.username)}" if user.username else "—"
+    prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
     await _notify_admins(
         bot,
-        f"💰 Пользователь tg_id={user.tg_id} выбрал оплату {method.upper()} "
-        f"по офферу #{offer.id} (сумма {offer.price_rub:,} ₽, предоплата {prepay:,} ₽).".replace(",", " "),
+        f"📨 <b>Клиент сообщил об оплате</b> — оффер #{offer.id}\n"
+        f"Клиент: {h(user.name) or '—'} ({uname}, tg_id=<code>{user.tg_id}</code>)\n"
+        f"Ожидаем: <b>{prepay:,} ₽</b>\n".replace(",", " ")
+        + "Проверь приход в Тинькофф и нажми «✅ Оплата получена».",
+        kb=admin_confirm_paid_kb(offer.id),
     )
 
 
-async def _notify_admins(bot: Bot, text: str) -> None:
+@router.callback_query(F.data.regexp(r"^offer:(\d+):confirm_paid$"))
+async def offer_confirm_paid(cb: CallbackQuery, bot: Bot) -> None:
+    """Админ подтверждает приход денег. Бот:
+
+    1. Меняет статус оффера на ``confirmed_paid``.
+    2. Шлёт клиенту радостное сообщение про чек.
+    3. Шлёт админу напоминалку «пробей чек в Мой налог» с готовыми полями.
+    """
+    if not _is_admin(cb.from_user.id):
+        await cb.answer("Только для админов", show_alert=True)
+        return
+    _, offer_id_s, _ = (cb.data or "").split(":")
+    offer_id = int(offer_id_s)
+    async with SessionLocal() as session:
+        offer = await session.get(Offer, offer_id)
+        if offer is None:
+            await cb.answer("Оффер не найден", show_alert=True)
+            return
+        user = await session.get(User, offer.user_id)
+        if user is None:
+            await cb.answer("Пользователь не найден", show_alert=True)
+            return
+        if offer.status == "confirmed_paid":
+            await cb.answer("Уже подтверждено ранее", show_alert=True)
+            return
+        offer.status = "confirmed_paid"
+        await session.commit()
+    prepay = compute_prepayment(offer.price_rub, kind=offer.kind)
+    purpose = f"Предоплата по офферу ETP-{offer.id:06d}"
+
+    # Клиенту — подтверждение.
+    try:
+        await bot.send_message(
+            user.tg_id,
+            f"✅ <b>Оплата по офферу #{offer.id} подтверждена</b>\n\n"
+            f"Сумма: <b>{prepay:,} ₽</b>\n".replace(",", " ")
+            + f"Назначение: {purpose}\n\n"
+            "Чек самозанятого (НПД) придёт от ФНС в течение 24 часов "
+            "от продавца через приложение «Мой налог».",
+            reply_markup=main_menu(),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("Не удалось уведомить клиента %s: %s", user.tg_id, e)
+
+    # Обновим админу его сообщение, чтобы кнопка не висела.
+    if cb.message:
+        try:
+            await cb.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+
+    # Админам — напоминалка про чек ФНС.
+    uname = f"@{h(user.username)}" if user.username else "—"
+    reminder = (
+        f"🧾 <b>Не забудь пробить чек самозанятого</b> — оффер #{offer.id}\n\n"
+        "Открой приложение <b>«Мой налог»</b> или https://lknpd.nalog.ru → "
+        "«Новая продажа» и заполни:\n"
+        f"• Сумма: <b>{prepay:,} ₽</b>\n".replace(",", " ")
+        + f"• Наименование услуги: <i>{h(purpose)}</i>\n"
+        f"• От кого: физическое лицо ({h(user.name) or 'клиент'}, "
+        f"tg {uname})\n\n"
+        "После выпуска чека ФНС пришлёт PDF/ссылку — пересылай клиенту "
+        f"в этот чат напрямую (tg_id=<code>{user.tg_id}</code>)."
+    )
+    await _notify_admins(bot, reminder)
+    await cb.answer("Подтверждено ✅")
+
+
+async def _notify_admins(bot: Bot, text: str, kb=None) -> None:
     for admin_id in get_settings().admin_ids:
         try:
-            await bot.send_message(admin_id, text)
+            await bot.send_message(admin_id, text, reply_markup=kb)
         except Exception as e:
             log.warning("Не удалось отправить админу %s: %s", admin_id, e)

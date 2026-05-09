@@ -72,6 +72,13 @@ async def cmd_menu(message: Message, state: FSMContext) -> None:
     await message.answer("📍 Главное меню", reply_markup=main_menu())
 
 
+@router.callback_query(F.data == "menu:home")
+async def cb_menu_home(cb: CallbackQuery) -> None:
+    if cb.message:
+        await cb.message.answer("📍 Главное меню", reply_markup=main_menu())
+    await cb.answer()
+
+
 @router.callback_query(F.data == "menu:my")
 async def cb_my_requests(cb: CallbackQuery) -> None:
     tg = cb.from_user
