@@ -20,6 +20,7 @@ from ..keyboards import (
 )
 from ..notify import notify_admins_new_request
 from ..states import CarFlow
+from ..utils.text import h
 from ..utils.validators import parse_mileage, parse_money_usd, parse_year
 
 router = Router(name="car")
@@ -49,7 +50,7 @@ async def on_brand(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(brand=brand)
     await state.set_state(CarFlow.model)
-    await message.answer(f"Марка: <b>{brand}</b>\n\nВведите модель (например, «X5», «Camry»):")
+    await message.answer(f"Марка: <b>{h(brand)}</b>\n\nВведите модель (например, «X5», «Camry»):")
 
 
 # ----- модель ----- #
@@ -62,7 +63,7 @@ async def on_model(message: Message, state: FSMContext) -> None:
     await state.update_data(model=model)
     await state.set_state(CarFlow.min_year)
     await message.answer(
-        f"Модель: <b>{model}</b>\n\nМинимальный год выпуска (целое число, например 2018):"
+        f"Модель: <b>{h(model)}</b>\n\nМинимальный год выпуска (целое число, например 2018):"
     )
 
 
@@ -224,16 +225,16 @@ async def _finalize_car(cb: CallbackQuery, state: FSMContext) -> None:
     text = (
         f"✅ <b>Заявка #{req.id} принята.</b>\n\n"
         f"Тип: 🚗 авто ({'дилер' if data.get('condition') == 'dealer' else 'аукцион'})\n"
-        f"{summary}\n"
-        f"Привод: {data.get('drive_type')}, КПП: {data.get('gearbox')}, "
+        f"{h(summary)}\n"
+        f"Привод: {h(data.get('drive_type'))}, КПП: {h(data.get('gearbox'))}, "
         f"пробег ≤ {data.get('max_mileage'):,} км\n".replace(",", " ")
         + (
-            f"Повреждения: {data.get('auction_damage')}\n"
+            f"Повреждения: {h(data.get('auction_damage'))}\n"
             f"Макс. ставка: {data.get('auction_max_bid_usd'):,} $\n".replace(",", " ")
             if data.get("condition") == "auction"
             else ""
         )
-        + f"Оплата: <b>{pay}</b>\n\n"
+        + f"Оплата: <b>{h(pay)}</b>\n\n"
         "Менеджер свяжется с вами в ближайшее время."
     )
     if cb.message:

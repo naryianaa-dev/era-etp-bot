@@ -26,6 +26,7 @@ from ..utils.payments import (
     make_invoice_pdf,
     make_sbp_qr,
 )
+from ..utils.text import h
 from ..utils.validators import parse_int
 
 router = Router(name="admin")
@@ -297,8 +298,8 @@ async def _commit_offer(message: Message, state: FSMContext) -> None:
     prepay_str = prepay_line(prepay, kind=kind)
     text_to_user = (
         f"📨 <b>Новое предложение #{offer.id}</b>\n\n"
-        f"<b>{title}</b>\n\n"
-        f"{desc}\n\n"
+        f"<b>{h(title)}</b>\n\n"
+        f"{h(desc)}\n\n"
         f"Сумма: <b>{price:,} ₽</b>\n".replace(",", " ")
         + f"{prepay_str}\n\n"
         + "Нажмите «Сделать выбор», чтобы принять предложение и выбрать способ оплаты."
