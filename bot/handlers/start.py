@@ -29,7 +29,37 @@ WELCOME_BANNER = (
 
 @router.message(CommandStart())
 async def on_start(message: Message, state: FSMContext) -> None:
+    """`/start` показывает только одно: full-width reply-кнопку «🚀 Начать».
+
+    Никакого баннера/меню здесь — иначе следом отправляемое сообщение с
+    inline-меню в большинстве Telegram-клиентов схлопывает reply-клавиатуру
+    под иконку команд бота, и кнопка перестаёт быть видна. Сам welcome-flow
+    (баннер + меню или анкета имени) поднимается уже из ``on_welcome_button``
+    после явного тапа.
+    """
     await state.clear()
+    tg_user = message.from_user
+    if tg_user is None:
+        return
+
+    async with SessionLocal() as session:
+        # Создаём запись пользователя, чтобы при тапе по «🚀 Начать»
+        # сразу знать, новичок он или возвращающийся.
+        await get_or_create_user(session, tg_user.id, tg_user.username)
+
+    await message.answer(
+        "👇 Нажми кнопку, чтобы начать.",
+        reply_markup=welcome_reply_kb(),
+    )
+
+
+async def _send_welcome_flow(message: Message, state: FSMContext) -> None:
+    """Общий welcome-flow: баннер + (главное меню | анкета имени).
+
+    Вызывается и из ``on_welcome_button`` (тап по «🚀 Начать»), и при
+    необходимости из других мест. Здесь и приходит «здарова» от бота —
+    после явного действия пользователя, а не на сухой ``/start``.
+    """
     tg_user = message.from_user
     if tg_user is None:
         return
@@ -38,25 +68,19 @@ async def on_start(message: Message, state: FSMContext) -> None:
         user = await get_or_create_user(session, tg_user.id, tg_user.username)
         has_name = bool(user.name)
 
+    # Баннер шлём всегда: и новичкам, и возвращающимся. Без reply_markup,
+    # чтобы reply-клавиатура «🚀 Начать», поднятая из /start, осталась
+    # развёрнутой над полем ввода.
+    await message.answer(WELCOME_BANNER)
+
     if has_name:
-        # Баннер с описанием сервиса + персистентная reply-кнопка «🚀 Начать»
-        # снизу на всю ширину экрана. Telegram запоминает reply-клавиатуру
-        # даже когда сообщение прокручивается, так что кнопка всегда под рукой.
-        await message.answer(
-            WELCOME_BANNER,
-            reply_markup=welcome_reply_kb(),
-        )
         await message.answer(
             f"С возвращением, <b>{h(user.name)}</b>! Выбери раздел:",
             reply_markup=main_menu(),
         )
         return
 
-    # Новый пользователь: показываем баннер + просим имя.
-    await message.answer(
-        WELCOME_BANNER,
-        reply_markup=welcome_reply_kb(),
-    )
+    # Новый пользователь — переходим в регистрацию (имя).
     await state.set_state(Registration.waiting_for_name)
     await message.answer(
         "Для начала — как тебя зовут?",
@@ -67,6 +91,14 @@ async def on_start(message: Message, state: FSMContext) -> None:
 @router.message(Registration.waiting_for_name, F.text)
 async def on_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
+    if name == WELCOME_BUTTON_TEXT:
+        # Защита: если юзер во время анкеты тапнул по «🚀 Начать»,
+        # не воспринимаем это как имя.
+        await message.answer(
+            "Введи, пожалуйста, своё имя текстом.",
+            reply_markup=reply_cancel(),
+        )
+        return
     if len(name) < 2 or len(name) > 64:
         await message.answer("Пожалуйста, введите имя от 2 до 64 символов.")
         return
@@ -78,7 +110,8 @@ async def on_name(message: Message, state: FSMContext) -> None:
         user.name = name
         await session.commit()
     await state.clear()
-    # Подкладываем persistent reply-клавиатуру снизу + основное меню.
+    # Возвращаем persistent reply-клавиатуру с «🚀 Начать» (анкета затёрла
+    # её клавиатурой «Отмена») + показываем главное меню.
     await message.answer(
         f"Приятно познакомиться, <b>{h(name)}</b>!",
         reply_markup=welcome_reply_kb(),
@@ -91,8 +124,9 @@ async def on_name(message: Message, state: FSMContext) -> None:
 
 @router.message(F.text == WELCOME_BUTTON_TEXT)
 async def on_welcome_button(message: Message, state: FSMContext) -> None:
-    """Тап по reply-кнопке «🚀 Начать» — работает как ``/start``."""
-    await on_start(message, state)
+    """Тап по reply-кнопке «🚀 Начать» — основная точка входа в бот."""
+    await state.clear()
+    await _send_welcome_flow(message, state)
 
 
 @router.message(Command("menu"))
