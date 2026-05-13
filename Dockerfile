@@ -19,7 +19,6 @@ RUN pip install --upgrade pip \
 COPY bot /app/bot
 
 RUN mkdir -p /app/data
-VOLUME ["/app/data"]
 
 ENV DB_PATH=/app/data/bot.sqlite3
 
