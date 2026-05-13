@@ -9,10 +9,15 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from ..db import Request, SessionLocal, get_or_create_user
-from ..keyboards import main_menu, reply_cancel, yes_no_kb
+from ..keyboards import reply_cancel, yes_no_kb
 from ..notify import notify_admins_new_request
 from ..states import PartsFlow
+from ..utils.text import h
 from ..utils.validators import is_valid_vin, parse_year
+from ._post_request import (
+    finish_request_accepted_for_cb,
+    finish_request_accepted_for_message,
+)
 
 router = Router(name="parts")
 
@@ -182,14 +187,15 @@ async def _finalize_parts(message: Message, state: FSMContext) -> None:
         if message.bot is not None:
             await notify_admins_new_request(message.bot, req, user)
     await state.clear()
-    await message.answer(
-        f"✅ <b>Заявка #{req.id} на запчасть принята.</b>\n\n"
-        f"{summary}\n"
-        + (f"VIN: <code>{data.get('vin')}</code>\n" if data.get("vin") else "")
-        + (f"Артикул: <code>{data.get('part_number')}</code>\n" if data.get("part_number") else "")
+    summary_html = (
+        f"🔧 <b>Запчасть</b>\n"
+        f"{h(summary)}\n"
+        + (f"VIN: <code>{h(data.get('vin'))}</code>\n" if data.get("vin") else "")
+        + (f"Артикул: <code>{h(data.get('part_number'))}</code>\n" if data.get("part_number") else "")
         + ("Фото: получено\n" if data.get("photo_file_id") else "")
-        + "\nМенеджер подберёт деталь и свяжется с вами.",
-        reply_markup=main_menu(),
+    )
+    await finish_request_accepted_for_message(
+        message, request_id=req.id, summary_html=summary_html
     )
 
 
@@ -221,10 +227,8 @@ async def _finalize_parts_cb(cb: CallbackQuery, state: FSMContext) -> None:
         if cb.bot is not None:
             await notify_admins_new_request(cb.bot, req, user)
     await state.clear()
-    text = (
-        f"✅ <b>Заявка #{req.id} на запчасть принята.</b>\n\n{summary}\n\n"
-        "Менеджер подберёт деталь и свяжется с вами."
-    )
-    if cb.message:
-        await cb.message.edit_text(text, reply_markup=main_menu())
+    summary_html = f"🔧 <b>Запчасть</b>\n{h(summary)}\n"
     await cb.answer("Заявка отправлена")
+    await finish_request_accepted_for_cb(
+        cb, request_id=req.id, summary_html=summary_html
+    )

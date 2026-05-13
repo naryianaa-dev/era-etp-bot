@@ -21,6 +21,33 @@ class Settings(BaseSettings):
     prepay_min_rub: int = Field(100_000, alias="PREPAY_MIN_RUB")
     prepay_pct: int = Field(15, alias="PREPAY_PCT")
 
+    # Реквизиты получателя для PDF-счетов и QR-кода (ГОСТ Р 56042-2014).
+    # По умолчанию подставлены боевые реквизиты ООО «Форсаж»; при необходимости
+    # переопределяются через переменные окружения (Railway / .env).
+    payee_name: str = Field("ООО «Форсаж»", alias="PAYEE_NAME")
+    payee_inn: str = Field("7728282160", alias="PAYEE_INN")
+    payee_kpp: str | None = Field("773001001", alias="PAYEE_KPP")
+    payee_tax_regime: str = Field("ОСНО (юридическое лицо)", alias="PAYEE_TAX_REGIME")
+    payee_account: str = Field("40702810101500033019", alias="PAYEE_ACCOUNT")
+    payee_bank_name: str = Field("ООО «Банк Точка»", alias="PAYEE_BANK_NAME")
+    payee_bik: str = Field("044525104", alias="PAYEE_BIK")
+    payee_corr_account: str = Field("30101810745374525104", alias="PAYEE_CORR_ACCOUNT")
+    # Юридический / почтовый адрес получателя — попадает в PDF-счёт.
+    payee_address: str | None = Field(
+        "121059, г. Москва, ул. Киевская, д. 14, оф. 2а",
+        alias="PAYEE_ADDRESS",
+    )
+    payee_email: str | None = Field(None, alias="PAYEE_EMAIL")
+    # Телефон для приёма СБП-перевода. Если пусто — клиенту показывается
+    # только инструкция по реквизитам (ГОСТ Р QR). Если указано — добавляется
+    # отдельный блок «Перевод СБП по номеру: +7…» в caption к QR.
+    payee_phone: str | None = Field(None, alias="PAYEE_PHONE")
+    # Прямая ссылка на быструю оплату (например, статичная Tinkoff
+    # «tinkoff.ru/rm/...»). Если задана — клиент получает inline-кнопку
+    # «💳 Оплатить N ₽», которая открывает банк/браузер, и не страдает с
+    # ручным вводом. ГОСТ Р QR остаётся как fallback.
+    payee_payment_url: str | None = Field(None, alias="PAYEE_PAYMENT_URL")
+
     tz: str = Field("Europe/Moscow", alias="TZ")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 

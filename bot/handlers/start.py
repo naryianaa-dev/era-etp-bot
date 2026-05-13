@@ -11,8 +11,9 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 
 from ..db import Request, SessionLocal, get_or_create_user
-from ..keyboards import main_menu, reply_cancel
+from ..keyboards import WELCOME_BUTTON_TEXT, main_menu, reply_cancel, welcome_reply_kb
 from ..states import Registration
+from ..utils.text import h
 
 router = Router(name="start")
 
@@ -29,18 +30,26 @@ async def on_start(message: Message, state: FSMContext) -> None:
         has_name = bool(user.name)
 
     if has_name:
+        # Сначала «подкладываем» persistent reply-клавиатуру снизу
+        # отдельным маленьким сообщением — её Telegram запоминает
+        # даже после удаления этого сообщения. Затем — обычное меню.
         await message.answer(
-            f"С возвращением, <b>{user.name}</b>! 👋\n\n"
-            "Выберите, что сделать:",
+            "👋",
+            reply_markup=welcome_reply_kb(),
+        )
+        await message.answer(
+            f"С возвращением, <b>{h(user.name)}</b>!\n\n"
+            "Выбери раздел:",
             reply_markup=main_menu(),
         )
         return
 
     await state.set_state(Registration.waiting_for_name)
     await message.answer(
-        "👋 Привет! Я <b>era_etp_bot</b> — помогу подобрать автомобиль, "
-        "запчасти или выполнить покупку под ключ.\n\n"
-        "Как вас зовут?",
+        "👋 <b>Привет! Я era_etp_bot.</b>\n\n"
+        "Помогу подобрать автомобиль, запчасти или выполнить покупку под "
+        "ключ — от заявки до чека самозанятого.\n\n"
+        "Для начала — как тебя зовут?",
         reply_markup=reply_cancel(),
     )
 
@@ -59,16 +68,34 @@ async def on_name(message: Message, state: FSMContext) -> None:
         user.name = name
         await session.commit()
     await state.clear()
+    # Подкладываем persistent reply-клавиатуру снизу + основное меню.
     await message.answer(
-        f"Приятно познакомиться, <b>{name}</b>! Выберите, что сделать:",
+        f"Приятно познакомиться, <b>{h(name)}</b>!",
+        reply_markup=welcome_reply_kb(),
+    )
+    await message.answer(
+        "Выбери раздел:",
         reply_markup=main_menu(),
     )
+
+
+@router.message(F.text == WELCOME_BUTTON_TEXT)
+async def on_welcome_button(message: Message, state: FSMContext) -> None:
+    """Тап по reply-кнопке «🚀 Начать» — работает как ``/start``."""
+    await on_start(message, state)
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("📍 Главное меню", reply_markup=main_menu())
+
+
+@router.callback_query(F.data == "menu:home")
+async def cb_menu_home(cb: CallbackQuery) -> None:
+    if cb.message:
+        await cb.message.answer("📍 Главное меню", reply_markup=main_menu())
+    await cb.answer()
 
 
 @router.callback_query(F.data == "menu:my")
@@ -95,7 +122,7 @@ async def cb_my_requests(cb: CallbackQuery) -> None:
             summary = payload.get("summary") or payload.get("brand") or "заявка"
             lines.append(
                 f"• #{r.id} | {dt} | {kind_ru.get(r.kind, r.kind)} | "
-                f"<i>{summary}</i> | статус: {r.status}"
+                f"<i>{h(summary)}</i> | статус: {h(r.status)}"
             )
         text = "\n".join(lines)
 

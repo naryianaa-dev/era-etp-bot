@@ -42,6 +42,23 @@ def reply_cancel() -> ReplyKeyboardMarkup:
     )
 
 
+WELCOME_BUTTON_TEXT = "🚀 Начать"
+
+
+def welcome_reply_kb() -> ReplyKeyboardMarkup:
+    """Стационарная клавиатура снизу с одной full-width-кнопкой «🚀 Начать».
+
+    Показывается на старте/в idle-состоянии: даёт пользователю всегда
+    доступный «крупный» вход в бота. Тап шлёт текст ``🚀 Начать``,
+    который ловится отдельным хендлером и работает как ``/start``.
+    """
+    return ReplyKeyboardMarkup(
+        resize_keyboard=True,
+        is_persistent=True,
+        keyboard=[[KeyboardButton(text=WELCOME_BUTTON_TEXT)]],
+    )
+
+
 # ---------- Ветка «Авто» ---------- #
 def drive_type_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -120,5 +137,49 @@ def offer_choice_kb(offer_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Сделать выбор", callback_data=f"offer:{offer_id}:accept")],
             [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"offer:{offer_id}:decline")],
+        ]
+    )
+
+
+def client_paid_kb(
+    offer_id: int,
+    *,
+    pay_url: str | None = None,
+    amount_rub: int | None = None,
+) -> InlineKeyboardMarkup:
+    """Клавиатура у клиента после получения QR/PDF: «Я оплатил» + меню.
+
+    Если переданы ``pay_url`` (например, статичная ``tinkoff.ru/rm/...``)
+    и ``amount_rub`` — добавляется верхняя URL-кнопка «💳 Оплатить N ₽».
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    if pay_url:
+        if amount_rub is not None:
+            label = f"🟢 Оплатить через СБП — {amount_rub:,} ₽".replace(",", " ")
+        else:
+            label = "🟢 Оплатить через СБП"
+        rows.append([InlineKeyboardButton(text=label, url=pay_url)])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="✅ Я оплатил",
+                callback_data=f"offer:{offer_id}:claim_paid",
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton(text="🏠 В главное меню", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_confirm_paid_kb(offer_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура у админа в уведомлении об ожидании оплаты: «Оплата получена»."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Оплата получена",
+                    callback_data=f"offer:{offer_id}:confirm_paid",
+                )
+            ],
         ]
     )
