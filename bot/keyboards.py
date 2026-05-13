@@ -42,6 +42,23 @@ def reply_cancel() -> ReplyKeyboardMarkup:
     )
 
 
+WELCOME_BUTTON_TEXT = "🚀 Начать"
+
+
+def welcome_reply_kb() -> ReplyKeyboardMarkup:
+    """Стационарная клавиатура снизу с одной full-width-кнопкой «🚀 Начать».
+
+    Показывается на старте/в idle-состоянии: даёт пользователю всегда
+    доступный «крупный» вход в бота. Тап шлёт текст ``🚀 Начать``,
+    который ловится отдельным хендлером и работает как ``/start``.
+    """
+    return ReplyKeyboardMarkup(
+        resize_keyboard=True,
+        is_persistent=True,
+        keyboard=[[KeyboardButton(text=WELCOME_BUTTON_TEXT)]],
+    )
+
+
 # ---------- Ветка «Авто» ---------- #
 def drive_type_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(

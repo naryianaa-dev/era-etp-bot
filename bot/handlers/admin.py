@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -24,6 +25,7 @@ from ..keyboards import (
     offer_choice_kb,
     payment_method_kb,
     reply_cancel,
+    welcome_reply_kb,
 )
 from ..notify import format_request, request_action_kb
 from ..states import AdminFlow
@@ -464,10 +466,14 @@ async def offer_claim_paid(cb: CallbackQuery, bot: Bot) -> None:
             await cb.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
+        # Спасибо клиенту — без inline-кнопок, чтобы дать «выдохнуть».
         await cb.message.answer(
-            f"✉️ Спасибо! Сообщили продавцу о вашей оплате по офферу #{offer.id}.\n\n"
-            "Как только увидим поступление, подтвердим и пришлём чек самозанятого.",
-            reply_markup=main_menu(),
+            f"🙏 <b>Спасибо!</b>\n\n"
+            f"Сообщили продавцу о вашей оплате по офферу #{offer.id}. "
+            "Как только увидим поступление, подтвердим и пришлём чек "
+            "самозанятого (НПД) от ФНС.\n\n"
+            "Через пару секунд вернёмся к главному меню — можно оформить "
+            "ещё одну заявку.",
         )
     await cb.answer()
 
@@ -481,6 +487,23 @@ async def offer_claim_paid(cb: CallbackQuery, bot: Bot) -> None:
         + "Проверь приход в Тинькофф и нажми «✅ Оплата получена».",
         kb=admin_confirm_paid_kb(offer.id),
     )
+
+    # Пауза 3 секунды — чтобы клиент успел прочитать «Спасибо» — и затем
+    # пере-показываем главное меню, чтобы можно было сразу оформить
+    # следующую заявку без ручного /menu.
+    if cb.message:
+        await asyncio.sleep(3)
+        try:
+            await cb.message.answer(
+                "👋",
+                reply_markup=welcome_reply_kb(),
+            )
+            await cb.message.answer(
+                "📍 Главное меню — выбери, что сделать дальше:",
+                reply_markup=main_menu(),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("Не удалось показать главное меню после claim_paid: %s", e)
 
 
 @router.callback_query(F.data.regexp(r"^offer:(\d+):confirm_paid$"))
