@@ -12,11 +12,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY pyproject.toml /app/
+# Copy the package source before `pip install .` — newer pip resolves package
+# dirs eagerly during wheel build, so `bot/` and README.md must exist.
+COPY pyproject.toml README.md /app/
+COPY bot /app/bot
+
 RUN pip install --upgrade pip \
     && pip install .
-
-COPY bot /app/bot
 
 RUN mkdir -p /app/data
 
