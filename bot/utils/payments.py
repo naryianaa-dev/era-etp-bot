@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 from datetime import datetime
+from pathlib import Path
 
 import qrcode
 from reportlab.lib.pagesizes import A4
@@ -29,6 +30,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from ..config import get_settings
+
+# Логотип ERA (тот же, что висит в шапке forsage.ct.ws — «logo-forsage-modified»).
+# Лежит в репо рядом с пакетом ``bot/`` → ``bot/assets/logo.png``. Если файла
+# по какой-то причине нет в образе — PDF всё равно сгенерится, шапка просто
+# будет без логотипа (см. try/except ниже в ``make_invoice_pdf``).
+_LOGO_PATH: Path = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
 
 
 def prepay_line(prepay_rub: int, kind: str | None = None) -> str:
@@ -227,6 +234,27 @@ def make_invoice_pdf(
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
+
+    # ----- Логотип ERA в правом верхнем углу страницы ----- #
+    # Сам логотип широкий (≈3:1), поэтому фиксируем ширину; высота отрисуется
+    # пропорционально благодаря ``preserveAspectRatio=True``. Если файла нет —
+    # тихо игнорируем, шапка остаётся текстовой.
+    try:
+        if _LOGO_PATH.is_file():
+            logo_w = 4.2 * cm
+            logo_h = 1.4 * cm
+            c.drawImage(
+                ImageReader(str(_LOGO_PATH)),
+                w - logo_w - 2 * cm,
+                h - logo_h - 1.4 * cm,
+                width=logo_w,
+                height=logo_h,
+                mask="auto",
+                preserveAspectRatio=True,
+                anchor="ne",
+            )
+    except Exception:  # noqa: BLE001 — отсутствие/битый логотип не должен ломать PDF
+        pass
 
     c.setFont(_REGISTERED_FONT, 16)
     c.drawString(2 * cm, h - 2 * cm, "Счёт на предоплату")
