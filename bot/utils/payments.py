@@ -297,6 +297,12 @@ def make_invoice_pdf(
         y -= line_h
 
     # ----- QR-код в правом нижнем углу страницы ----- #
+    # Y-координаты подобраны так, чтобы:
+    #   • QR-код сидел в правом нижнем углу (qr_y ≈ 3 см от низа),
+    #   • подпись «QR-код по ГОСТ Р…» сразу под QR (qr_y - 0.4 см),
+    #   • нижний колонтитул «Документ сгенерирован…» был **ниже** подписи под QR
+    #     (1.0 см от низа). Раньше колонтитул и подпись стояли на одной высоте
+    #     (2.0 см vs 2.1 см) и пересекались правой третью страницы.
     try:
         purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
         payload = _gost_qr_payload(amount_rub=prepay_rub, purpose=purpose)
@@ -309,7 +315,7 @@ def make_invoice_pdf(
         qr_img = ImageReader(qr_buf)
         qr_size = 5.5 * cm
         qr_x = w - qr_size - 2 * cm
-        qr_y = 2.5 * cm
+        qr_y = 3 * cm
         c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size, mask="auto")
         c.setFont(_REGISTERED_FONT, 9)
         c.drawRightString(
@@ -323,7 +329,7 @@ def make_invoice_pdf(
     c.setFont(_REGISTERED_FONT, 9)
     c.drawString(
         2 * cm,
-        2 * cm,
+        1 * cm,
         "Документ сгенерирован автоматически era_etp_bot. Подпись не требуется.",
     )
     c.showPage()
