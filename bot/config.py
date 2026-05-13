@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     payee_bank_name: str = Field("АО «ТИНЬКОФФ БАНК»", alias="PAYEE_BANK_NAME")
     payee_bik: str = Field("044525974", alias="PAYEE_BIK")
     payee_corr_account: str = Field("30101810145250000974", alias="PAYEE_CORR_ACCOUNT")
-    payee_email: str | None = Field("karoak@mail.ru", alias="PAYEE_EMAIL")
+    payee_email: str | None = Field("hasstepanian@gmail.com", alias="PAYEE_EMAIL")
     # Телефон для приёма СБП-перевода. Если пусто — клиенту показывается
     # только инструкция по реквизитам (ГОСТ Р QR). Если указано — добавляется
     # отдельный блок «Перевод СБП по номеру: +7…» в caption к QR.

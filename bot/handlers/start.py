@@ -18,6 +18,15 @@ from ..utils.text import h
 router = Router(name="start")
 
 
+WELCOME_BANNER = (
+    "🌐 <b>ERA</b> — ваш личный шопинг-агент за рубежом.\n\n"
+    "Amazon, ASOS, iHerb, официальные сайты брендов — мы выкупим и доставим "
+    "всё, что вы найдёте в интернете.\n\n"
+    "Оплачивайте привычной российской картой через СБП 💳\n\n"
+    "Нашли нужный товар? Оставляйте заявку — остальное за нами ✈️"
+)
+
+
 @router.message(CommandStart())
 async def on_start(message: Message, state: FSMContext) -> None:
     await state.clear()
@@ -30,25 +39,26 @@ async def on_start(message: Message, state: FSMContext) -> None:
         has_name = bool(user.name)
 
     if has_name:
-        # Сначала «подкладываем» persistent reply-клавиатуру снизу
-        # отдельным маленьким сообщением — её Telegram запоминает
-        # даже после удаления этого сообщения. Затем — обычное меню.
+        # Баннер с описанием сервиса + персистентная reply-кнопка «🚀 Начать»
+        # снизу на всю ширину экрана. Telegram запоминает reply-клавиатуру
+        # даже когда сообщение прокручивается, так что кнопка всегда под рукой.
         await message.answer(
-            "👋",
+            WELCOME_BANNER,
             reply_markup=welcome_reply_kb(),
         )
         await message.answer(
-            f"С возвращением, <b>{h(user.name)}</b>!\n\n"
-            "Выбери раздел:",
+            f"С возвращением, <b>{h(user.name)}</b>! Выбери раздел:",
             reply_markup=main_menu(),
         )
         return
 
+    # Новый пользователь: показываем баннер + просим имя.
+    await message.answer(
+        WELCOME_BANNER,
+        reply_markup=welcome_reply_kb(),
+    )
     await state.set_state(Registration.waiting_for_name)
     await message.answer(
-        "👋 <b>Привет! Я era_etp_bot.</b>\n\n"
-        "Помогу подобрать автомобиль, запчасти или выполнить покупку под "
-        "ключ — от заявки до чека самозанятого.\n\n"
         "Для начала — как тебя зовут?",
         reply_markup=reply_cancel(),
     )
