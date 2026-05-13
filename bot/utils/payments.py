@@ -4,15 +4,15 @@ QR-код формируется в формате ГОСТ Р 56042-2014 — э
 российский стандарт «банковский QR-код для платёжных документов».
 Сканер любого крупного банка РФ (Тинькофф, Сбер, Альфа, ВТБ и т.д.)
 парсит этот формат и автоматически заполняет форму перевода:
-получатель, ИНН/КПП, БИК, расч. счёт, корр. счёт, сумма и назначение.
+получатель, ИНН, БИК, расч. счёт, корр. счёт, сумма и назначение.
 
 PDF-счёт содержит те же реквизиты в человекочитаемом виде и
 дополнительно — этот же QR-код, чтобы клиент мог отсканировать счёт
 камерой банка и сразу перевести деньги без ручного ввода.
 
 Реквизиты получателя берутся из настроек (см. ``bot/config.py``,
-поля ``payee_*``); по умолчанию — боевые реквизиты ООО «Форсаж»,
-при необходимости переопределяются через переменные окружения.
+поля ``payee_*``); по умолчанию — боевые реквизиты самозанятого
+(НПД), при необходимости переопределяются через переменные окружения.
 """
 
 from __future__ import annotations
@@ -95,17 +95,12 @@ def payment_caption(offer_id: int, prepay_rub: int) -> str:
     amount_str = f"{prepay_rub:,} ₽".replace(",", " ")
     purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
 
-    payee_line = f"<b>Получатель:</b> {st.payee_name} (ИНН {st.payee_inn}"
-    if st.payee_kpp:
-        payee_line += f", КПП {st.payee_kpp}"
-    payee_line += ")"
-
     parts: list[str] = [
         f"📱 <b>Оплата — оффер #{offer_id}</b>",
         "",
         f"<b>Сумма:</b> {amount_str}",
         f"<b>Назначение:</b> {purpose}",
-        payee_line,
+        f"<b>Получатель:</b> {st.payee_name} (НПД, ИНН {st.payee_inn})",
         "",
     ]
     if st.payee_payment_url:
@@ -161,8 +156,7 @@ def payment_caption(offer_id: int, prepay_rub: int) -> str:
             ]
         )
     parts.append(
-        "После оплаты нажми «✅ Я оплатил» — мы зафиксируем платёж и пришлём "
-        "закрывающие документы (УПД/счёт-фактуру) на e-mail."
+        "После оплаты нажми «✅ Я оплатил» — мы пришлём чек самозанятого (НПД) от ФНС."
     )
     return "\n".join(parts)
 
@@ -190,8 +184,6 @@ def _gost_qr_payload(amount_rub: int, purpose: str) -> str:
         f"Purpose={purpose}",
         f"PayeeINN={st.payee_inn}",
     ]
-    if st.payee_kpp:
-        fields.append(f"KPP={st.payee_kpp}")
     return "|".join(fields)
 
 
@@ -255,22 +247,13 @@ def make_invoice_pdf(
         "",
         "Реквизиты для оплаты:",
         f"  Получатель: {st.payee_name}",
-    ]
-    if st.payee_address:
-        lines.append(f"  Юр. адрес: {st.payee_address}")
-    lines.extend([
+        f"  Режим налогообложения: {st.payee_tax_regime}",
         f"  ИНН: {st.payee_inn}",
-    ])
-    if st.payee_kpp:
-        lines.append(f"  КПП: {st.payee_kpp}")
-    if st.payee_tax_regime:
-        lines.append(f"  Режим налогообложения: {st.payee_tax_regime}")
-    lines.extend([
         f"  Расч. счёт: {st.payee_account}",
         f"  Банк: {st.payee_bank_name}",
         f"  БИК: {st.payee_bik}",
         f"  Корр. счёт: {st.payee_corr_account}",
-    ])
+    ]
     if st.payee_email:
         lines.append(f"  E-mail: {st.payee_email}")
     lines.extend([
@@ -278,8 +261,8 @@ def make_invoice_pdf(
         "Назначение платежа: предоплата по офферу ETP-"
         f"{offer_id:06d}.",
         "",
-        "Закрывающие документы (УПД / счёт-фактура) будут направлены",
-        "клиенту после фактического поступления оплаты на расчётный счёт.",
+        "Чек самозанятого (НПД) придёт от продавца через приложение",
+        "«Мой налог» / lknpd.nalog.ru после фактического поступления оплаты.",
     ])
     for line in lines:
         c.drawString(2 * cm, y, line)
