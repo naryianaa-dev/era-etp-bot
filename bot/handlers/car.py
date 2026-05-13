@@ -14,7 +14,6 @@ from ..keyboards import (
     condition_kb,
     drive_type_kb,
     gearbox_kb,
-    main_menu,
     payment_method_kb,
     reply_cancel,
 )
@@ -22,6 +21,7 @@ from ..notify import notify_admins_new_request
 from ..states import CarFlow
 from ..utils.text import h
 from ..utils.validators import parse_mileage, parse_money_usd, parse_year
+from ._post_request import finish_request_accepted_for_cb
 
 router = Router(name="car")
 log = logging.getLogger(__name__)
@@ -222,9 +222,9 @@ async def _finalize_car(cb: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     pay = "СБП" if data.get("payment_method") == "sbp" else "Счёт (PDF)"
-    text = (
-        f"✅ <b>Заявка #{req.id} принята.</b>\n\n"
-        f"Тип: 🚗 авто ({'дилер' if data.get('condition') == 'dealer' else 'аукцион'})\n"
+    summary_html = (
+        f"🚗 <b>Автомобиль</b> "
+        f"({'дилер' if data.get('condition') == 'dealer' else 'аукцион'})\n"
         f"{h(summary)}\n"
         f"Привод: {h(data.get('drive_type'))}, КПП: {h(data.get('gearbox'))}, "
         f"пробег ≤ {data.get('max_mileage'):,} км\n".replace(",", " ")
@@ -234,9 +234,9 @@ async def _finalize_car(cb: CallbackQuery, state: FSMContext) -> None:
             if data.get("condition") == "auction"
             else ""
         )
-        + f"Оплата: <b>{h(pay)}</b>\n\n"
-        "Менеджер свяжется с вами в ближайшее время."
+        + f"Оплата: <b>{h(pay)}</b>\n"
     )
-    if cb.message:
-        await cb.message.edit_text(text, reply_markup=main_menu())
     await cb.answer("Заявка отправлена")
+    await finish_request_accepted_for_cb(
+        cb, request_id=req.id, summary_html=summary_html
+    )

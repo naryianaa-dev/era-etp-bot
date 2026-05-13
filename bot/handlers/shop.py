@@ -9,11 +9,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from ..db import Request, SessionLocal, get_or_create_user
-from ..keyboards import main_menu, reply_cancel
+from ..keyboards import reply_cancel
 from ..notify import notify_admins_new_request
 from ..states import ShopFlow
 from ..utils.text import h
 from ..utils.validators import is_valid_url
+from ._post_request import finish_request_accepted_for_message
 
 router = Router(name="shop")
 
@@ -86,11 +87,12 @@ async def on_comments(message: Message, state: FSMContext) -> None:
         if message.bot is not None:
             await notify_admins_new_request(message.bot, req, user)
     await state.clear()
-    await message.answer(
-        f"✅ <b>Заявка #{req.id} на покупку принята.</b>\n\n"
+    summary_html = (
+        f"🛒 <b>Покупка</b>\n"
         f"Товар: {h(data.get('product_name'))}\n"
         f"Ссылка: {h(data.get('url'))}\n"
         + (f"Комментарии: {h(val)}\n" if val else "")
-        + "\nМенеджер свяжется с вами с предложением.",
-        reply_markup=main_menu(),
+    )
+    await finish_request_accepted_for_message(
+        message, request_id=req.id, summary_html=summary_html
     )

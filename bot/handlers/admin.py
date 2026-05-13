@@ -543,8 +543,8 @@ async def offer_confirm_paid(cb: CallbackQuery, bot: Bot) -> None:
             f"✅ <b>Оплата по офферу #{offer.id} подтверждена</b>\n\n"
             f"Сумма: <b>{prepay:,} ₽</b>\n".replace(",", " ")
             + f"Назначение: {purpose}\n\n"
-            "Чек самозанятого (НПД) придёт от ФНС в течение 24 часов "
-            "от продавца через приложение «Мой налог».",
+            "Закрывающие документы (УПД / счёт-фактуру) пришлём на e-mail "
+            "после фактического поступления оплаты на расчётный счёт.",
             reply_markup=main_menu(),
         )
     except Exception as e:  # noqa: BLE001
@@ -557,18 +557,17 @@ async def offer_confirm_paid(cb: CallbackQuery, bot: Bot) -> None:
         except Exception:
             pass
 
-    # Админам — напоминалка про чек ФНС.
+    # Админам — напоминалка про закрывающие документы.
     uname = f"@{h(user.username)}" if user.username else "—"
     reminder = (
-        f"🧾 <b>Не забудь пробить чек самозанятого</b> — оффер #{offer.id}\n\n"
-        "Открой приложение <b>«Мой налог»</b> или https://lknpd.nalog.ru → "
-        "«Новая продажа» и заполни:\n"
+        f"🧾 <b>Не забудь выставить УПД/счёт-фактуру</b> — оффер #{offer.id}\n\n"
+        "После зачисления оплаты на расчётный счёт сформируй закрывающие "
+        "документы и пришли клиенту на e-mail.\n\n"
         f"• Сумма: <b>{prepay:,} ₽</b>\n".replace(",", " ")
-        + f"• Наименование услуги: <i>{h(purpose)}</i>\n"
-        f"• От кого: физическое лицо ({h(user.name) or 'клиент'}, "
-        f"tg {uname})\n\n"
-        "После выпуска чека ФНС пришлёт PDF/ссылку — пересылай клиенту "
-        f"в этот чат напрямую (tg_id=<code>{user.tg_id}</code>)."
+        + f"• Назначение: <i>{h(purpose)}</i>\n"
+        f"• Покупатель: {h(user.name) or 'клиент'} (tg {uname}, "
+        f"tg_id=<code>{user.tg_id}</code>)\n\n"
+        "Готовые PDF (УПД / счёт-фактуру) пересылай клиенту в этот же чат."
     )
     await _notify_admins(bot, reminder)
     await cb.answer("Подтверждено ✅")

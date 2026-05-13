@@ -4,13 +4,15 @@ QR-код формируется в формате ГОСТ Р 56042-2014 — э
 российский стандарт «банковский QR-код для платёжных документов».
 Сканер любого крупного банка РФ (Тинькофф, Сбер, Альфа, ВТБ и т.д.)
 парсит этот формат и автоматически заполняет форму перевода:
-получатель, ИНН, БИК, расч. счёт, корр. счёт, сумма и назначение.
+получатель, ИНН/КПП, БИК, расч. счёт, корр. счёт, сумма и назначение.
 
-PDF-счёт содержит те же реквизиты в человекочитаемом виде.
+PDF-счёт содержит те же реквизиты в человекочитаемом виде и
+дополнительно — этот же QR-код, чтобы клиент мог отсканировать счёт
+камерой банка и сразу перевести деньги без ручного ввода.
 
 Реквизиты получателя берутся из настроек (см. ``bot/config.py``,
-поля ``payee_*``); по умолчанию — боевые реквизиты самозанятого
-(НПД), при необходимости переопределяются через переменные окружения.
+поля ``payee_*``); по умолчанию — боевые реквизиты ООО «Форсаж»,
+при необходимости переопределяются через переменные окружения.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from datetime import datetime
 import qrcode
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -92,12 +95,17 @@ def payment_caption(offer_id: int, prepay_rub: int) -> str:
     amount_str = f"{prepay_rub:,} ₽".replace(",", " ")
     purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
 
+    payee_line = f"<b>Получатель:</b> {st.payee_name} (ИНН {st.payee_inn}"
+    if st.payee_kpp:
+        payee_line += f", КПП {st.payee_kpp}"
+    payee_line += ")"
+
     parts: list[str] = [
         f"📱 <b>Оплата — оффер #{offer_id}</b>",
         "",
         f"<b>Сумма:</b> {amount_str}",
         f"<b>Назначение:</b> {purpose}",
-        f"<b>Получатель:</b> {st.payee_name} (НПД, ИНН {st.payee_inn})",
+        payee_line,
         "",
     ]
     if st.payee_payment_url:
@@ -152,7 +160,10 @@ def payment_caption(offer_id: int, prepay_rub: int) -> str:
                 "",
             ]
         )
-    parts.append("После оплаты нажми «✅ Я оплатил» — мы пришлём чек самозанятого.")
+    parts.append(
+        "После оплаты нажми «✅ Я оплатил» — мы зафиксируем платёж и пришлём "
+        "закрывающие документы (УПД/счёт-фактуру) на e-mail."
+    )
     return "\n".join(parts)
 
 
@@ -179,6 +190,8 @@ def _gost_qr_payload(amount_rub: int, purpose: str) -> str:
         f"Purpose={purpose}",
         f"PayeeINN={st.payee_inn}",
     ]
+    if st.payee_kpp:
+        fields.append(f"KPP={st.payee_kpp}")
     return "|".join(fields)
 
 
@@ -213,7 +226,10 @@ def make_invoice_pdf(
 ) -> bytes:
     """Сгенерировать PDF-счёт на предоплату. Возвращает байты PDF.
 
-    Реквизиты получателя берутся из ``Settings.payee_*``.
+    Реквизиты получателя берутся из ``Settings.payee_*``. В правом
+    нижнем углу страницы встраивается тот же ГОСТ Р QR, что бот шлёт
+    отдельным изображением — клиент может оплатить счёт прямо со
+    сканера банковского приложения, не возвращаясь в чат.
     """
     st = get_settings()
     buf = io.BytesIO()
@@ -227,7 +243,7 @@ def make_invoice_pdf(
     y = h - 3.2 * cm
     line_h = 0.6 * cm
 
-    lines = [
+    lines: list[str] = [
         f"Счёт № ETP-{offer_id:06d} от {datetime.now().strftime('%d.%m.%Y %H:%M')}",
         f"Заказчик: {user_name or '—'} (Telegram ID {user_tg_id})",
         "",
@@ -239,20 +255,59 @@ def make_invoice_pdf(
         "",
         "Реквизиты для оплаты:",
         f"  Получатель: {st.payee_name}",
-        f"  Режим налогообложения: {st.payee_tax_regime}",
+    ]
+    if st.payee_address:
+        lines.append(f"  Юр. адрес: {st.payee_address}")
+    lines.extend([
         f"  ИНН: {st.payee_inn}",
+    ])
+    if st.payee_kpp:
+        lines.append(f"  КПП: {st.payee_kpp}")
+    if st.payee_tax_regime:
+        lines.append(f"  Режим налогообложения: {st.payee_tax_regime}")
+    lines.extend([
         f"  Расч. счёт: {st.payee_account}",
         f"  Банк: {st.payee_bank_name}",
         f"  БИК: {st.payee_bik}",
         f"  Корр. счёт: {st.payee_corr_account}",
-        f"  E-mail: {st.payee_email}",
+    ])
+    if st.payee_email:
+        lines.append(f"  E-mail: {st.payee_email}")
+    lines.extend([
         "",
         "Назначение платежа: предоплата по офферу ETP-"
         f"{offer_id:06d}.",
-    ]
+        "",
+        "Закрывающие документы (УПД / счёт-фактура) будут направлены",
+        "клиенту после фактического поступления оплаты на расчётный счёт.",
+    ])
     for line in lines:
         c.drawString(2 * cm, y, line)
         y -= line_h
+
+    # ----- QR-код в правом нижнем углу страницы ----- #
+    try:
+        purpose = f"Предоплата по офферу ETP-{offer_id:06d}"
+        payload = _gost_qr_payload(amount_rub=prepay_rub, purpose=purpose)
+        # qrcode.make → PIL Image; ImageReader умеет с PIL Image работать
+        # напрямую, но безопаснее прогнать через PNG-байты (стабильно во
+        # всех версиях reportlab).
+        qr_buf = io.BytesIO()
+        qrcode.make(payload, box_size=10, border=2).save(qr_buf, format="PNG")
+        qr_buf.seek(0)
+        qr_img = ImageReader(qr_buf)
+        qr_size = 5.5 * cm
+        qr_x = w - qr_size - 2 * cm
+        qr_y = 2.5 * cm
+        c.drawImage(qr_img, qr_x, qr_y, width=qr_size, height=qr_size, mask="auto")
+        c.setFont(_REGISTERED_FONT, 9)
+        c.drawRightString(
+            w - 2 * cm,
+            qr_y - 0.4 * cm,
+            "QR-код по ГОСТ Р 56042-2014 — сканируй камерой банка",
+        )
+    except Exception:  # noqa: BLE001 — отсутствие QR не должно ломать PDF
+        pass
 
     c.setFont(_REGISTERED_FONT, 9)
     c.drawString(
