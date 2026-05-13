@@ -16,11 +16,25 @@ from .db import init_db
 from .handlers import get_main_router
 
 
+BOT_DESCRIPTION = (
+    "ERA ETP — площадка под ключ: автомобили, запчасти, покупки.\n\n"
+    "Как это работает:\n"
+    "1) Создаёшь заявку в боте (марка/модель/бюджет — или просто ссылка на товар).\n"
+    "2) Менеджер пришлёт оффер с финальной ценой.\n"
+    "3) Оплата через СБП в один тап — кнопка прямо в чате.\n"
+    "4) Чек самозанятого (НПД) приходит автоматически от ФНС.\n\n"
+    "Жми «Начать», чтобы оформить первую заявку."
+)
+BOT_SHORT_DESCRIPTION = (
+    "Подбор авто, запчастей и покупок под ключ. Оплата СБП, чек НПД."
+)
+
+
 async def on_startup(bot: Bot) -> None:
     me = await bot.get_me()
     logging.info("Бот @%s запущен. id=%s", me.username, me.id)
     # проставим список команд в меню Telegram
-    from aiogram.types import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+    from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
 
     user_commands = [
         BotCommand(command="start", description="Начать работу"),
@@ -40,6 +54,18 @@ async def on_startup(bot: Bot) -> None:
             await bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception as e:
             logging.warning("Не удалось выставить команды для админа %s: %s", admin_id, e)
+
+    # Описание (видно на profile-странице бота, над кнопкой START для
+    # новых пользователей) + короткое описание (видно в превью бота).
+    # Telegram кэширует значения — set_my_* идемпотентны.
+    try:
+        await bot.set_my_description(description=BOT_DESCRIPTION)
+    except Exception as e:
+        logging.warning("Не удалось установить description: %s", e)
+    try:
+        await bot.set_my_short_description(short_description=BOT_SHORT_DESCRIPTION)
+    except Exception as e:
+        logging.warning("Не удалось установить short_description: %s", e)
 
 
 async def main() -> None:
