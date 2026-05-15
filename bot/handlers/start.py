@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
@@ -10,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 
-from ..db import Request, SessionLocal, get_or_create_user
+from ..db import Request, SessionLocal, get_or_create_user, is_name_fresh
 from ..keyboards import WELCOME_BUTTON_TEXT, main_menu, reply_cancel, welcome_reply_kb
 from ..states import Registration
 from ..utils.text import h
@@ -66,16 +67,16 @@ async def _send_welcome_flow(message: Message, state: FSMContext) -> None:
 
     async with SessionLocal() as session:
         user = await get_or_create_user(session, tg_user.id, tg_user.username)
-        has_name = bool(user.name)
+        fresh_name = user.name if is_name_fresh(user) else None
 
     # Баннер шлём всегда: и новичкам, и возвращающимся. Без reply_markup,
     # чтобы reply-клавиатура «🚀 Начать», поднятая из /start, осталась
     # развёрнутой над полем ввода.
     await message.answer(WELCOME_BANNER)
 
-    if has_name:
+    if fresh_name:
         await message.answer(
-            f"С возвращением, <b>{h(user.name)}</b>! Выбери раздел:",
+            f"С возвращением, <b>{h(fresh_name)}</b>! Выбери раздел:",
             reply_markup=main_menu(),
         )
         return
@@ -108,6 +109,7 @@ async def on_name(message: Message, state: FSMContext) -> None:
     async with SessionLocal() as session:
         user = await get_or_create_user(session, tg_user.id, tg_user.username)
         user.name = name
+        user.name_updated_at = datetime.utcnow()
         await session.commit()
     await state.clear()
     # Возвращаем persistent reply-клавиатуру с «🚀 Начать» (анкета затёрла
