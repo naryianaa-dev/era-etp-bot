@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from .config import get_settings
+
+
+# Срок жизни сохранённого имени пользователя: через этот интервал бот спросит имя заново.
+NAME_TTL_DAYS = 14
 
 
 class Base(DeclarativeBase):
@@ -23,6 +27,7 @@ class User(Base):
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    name_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     requests: Mapped[list["Request"]] = relationship(
@@ -90,6 +95,19 @@ async def init_db() -> None:
         existing = {row[1] for row in res.fetchall()}
         if "kind" not in existing:
             await conn.exec_driver_sql("ALTER TABLE offers ADD COLUMN kind VARCHAR(16)")
+        # users.name_updated_at — TTL для имени пользователя.
+        # Для существующих пользователей выставляем свежий timestamp, чтобы они
+        # не получили «представься заново» сразу после выкатки: 14 дней от выкатки.
+        res = await conn.exec_driver_sql("PRAGMA table_info(users)")
+        existing_users = {row[1] for row in res.fetchall()}
+        if "name_updated_at" not in existing_users:
+            await conn.exec_driver_sql(
+                "ALTER TABLE users ADD COLUMN name_updated_at DATETIME"
+            )
+            await conn.exec_driver_sql(
+                "UPDATE users SET name_updated_at = CURRENT_TIMESTAMP "
+                "WHERE name IS NOT NULL"
+            )
 
 
 async def get_or_create_user(
@@ -108,3 +126,10 @@ async def get_or_create_user(
         user.username = username
         await session.commit()
     return user
+
+
+def is_name_fresh(user: User) -> bool:
+    """Имя считается актуальным, если задано и обновлялось не более NAME_TTL_DAYS назад."""
+    if not user.name or user.name_updated_at is None:
+        return False
+    return datetime.utcnow() - user.name_updated_at < timedelta(days=NAME_TTL_DAYS)
