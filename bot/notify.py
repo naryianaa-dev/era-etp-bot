@@ -46,6 +46,8 @@ def format_request(req: Request, user: User) -> str:
         cond = payload.get("condition")
         if cond == "dealer":
             body_lines.append("Источник: <b>Дилер</b>")
+        elif cond == "eaeu_ge":
+            body_lines.append("Источник: <b>ЕАЭС и Грузия</b>")
         else:
             body_lines.append("Источник: <b>Аукцион</b>")
             body_lines.append(f"Повреждения: {h(payload.get('auction_damage'))}")

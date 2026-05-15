@@ -14,7 +14,7 @@ class CarFlow(StatesGroup):
     drive_type = State()
     gearbox = State()
     max_mileage = State()
-    condition = State()          # dealer / auction
+    condition = State()          # dealer / eaeu_ge / auction
     # Dealer-ветка
     dealer_payment = State()
     # Auction-ветка
