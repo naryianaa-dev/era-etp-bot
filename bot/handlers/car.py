@@ -123,7 +123,7 @@ async def on_mileage(message: Message, state: FSMContext) -> None:
     )
 
 
-# ----- дилер/аукцион ----- #
+# ----- дилер / ЕАЭС и Грузия / аукцион ----- #
 @router.callback_query(CarFlow.condition, F.data.startswith("car_cond:"))
 async def on_condition(cb: CallbackQuery, state: FSMContext) -> None:
     code = (cb.data or "").split(":", 1)[1]
@@ -133,6 +133,13 @@ async def on_condition(cb: CallbackQuery, state: FSMContext) -> None:
         if cb.message:
             await cb.message.edit_text(
                 "🏢 <b>Дилер</b>\n\nКак оплатить заявку?",
+                reply_markup=payment_method_kb("car_dealer"),
+            )
+    elif code == "eaeu_ge":
+        await state.set_state(CarFlow.dealer_payment)
+        if cb.message:
+            await cb.message.edit_text(
+                "🌍 <b>ЕАЭС и Грузия</b>\n\nКак оплатить заявку?",
                 reply_markup=payment_method_kb("car_dealer"),
             )
     else:
@@ -222,9 +229,15 @@ async def _finalize_car(cb: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     pay = "СБП" if data.get("payment_method") == "sbp" else "Счёт (PDF)"
+    condition_labels = {
+        "dealer": "дилер",
+        "eaeu_ge": "ЕАЭС и Грузия",
+        "auction": "аукцион",
+    }
+    cond_label = condition_labels.get(data.get("condition") or "", "—")
     summary_html = (
         f"🚗 <b>Автомобиль</b> "
-        f"({'дилер' if data.get('condition') == 'dealer' else 'аукцион'})\n"
+        f"({cond_label})\n"
         f"{h(summary)}\n"
         f"Привод: {h(data.get('drive_type'))}, КПП: {h(data.get('gearbox'))}, "
         f"пробег ≤ {data.get('max_mileage'):,} км\n".replace(",", " ")

@@ -100,6 +100,12 @@ def condition_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🏢 Дилер", callback_data="car_cond:dealer"),
                 InlineKeyboardButton(text="🧰 Аукцион", callback_data="car_cond:auction"),
             ],
+            [
+                InlineKeyboardButton(
+                    text="🌍 ЕАЭС и Грузия",
+                    callback_data="car_cond:eaeu_ge",
+                ),
+            ],
             [InlineKeyboardButton(text="↩️ Назад", callback_data="nav:back")],
         ]
     )
